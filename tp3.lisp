@@ -1,0 +1,208 @@
+(defun run (prg datos &optional (mem nil))
+	(if (null prg) nil
+		(if (eq (car (car prg)) 'int) (run (cdr prg) datos (insertarEnMem (cdr (car prg)) mem))
+			(if (eq (car (car prg)) 'main) (ejecutar (car (cdr (car prg))) datos mem) 'ERROR)	
+		)
+	)
+)
+
+(defun ejecutar (prg datos mem &optional (salida nil))
+	(if (null prg) (reverse salida)
+		(cond
+			( (esFuncion prg 'scanf) (ejecutar (cdr prg)(cdr datos) (asociar (car (cdr (car prg))) (car datos) mem) salida))
+			( (esFuncion prg 'printf) (ejecutar (cdr prg) datos mem (cons (evaluar (car (cdr (car prg))) mem) salida) ) )
+			( (esFuncion prg  'if) (procesar_if prg datos mem salida ))
+			( (esFuncion prg  'while)(procesar_while prg datos mem salida )) 
+			( (esAsignacion (car prg) mem) (ejecutar (cdr prg) datos (asignacion (car prg) mem) salida ) )
+			(  T (list 'Error_de_sintaxis  prg ))	
+		)
+	)
+)
+
+(defun esFuncion (prg funcion)
+	(equal (car (car prg)) funcion)
+)
+
+;Recibe las asignaciones previas al main y las almacena en la memoria
+(defun insertarEnMem (var mem)
+	(if (null var) nil
+		(if (equal (length var) 1) 	(asociar (car var) 0  mem)
+			(if (equal (nth 1 var) '=)		(asociar (nth 0 var) (nth 2 var)(insertarEnMem (cdr (cdr (cdr var))) mem))
+				(asociar (car var) (car (last var)) (insertarEnMem (cdr var) mem))
+			)
+		)	
+	)
+)
+
+;Busca la variable en la memoria y la modifica si existe o la agrega si no existe
+(defun asociar (var valor memoria)
+	; Si no lo encontre en la memoria lo agrego
+	(if (null memoria) (cons (list var valor) memoria)
+		; Si existe la modifico sino sigo buscando
+		(if (equal (car (car memoria)) var) (cons (list var valor) (cdr memoria))
+			(cons (car memoria) (asociar var valor (cdr memoria)))
+		)
+	)
+)
+
+;Reemplaza los nombres de las variables por su valor real 
+(defun reemplazarVars (prg mem)
+	(if (null prg) nil
+		(if (listp (car prg))	(cons (reemplazarVars (car prg) mem) (reemplazarVars (cdr prg) mem))
+			(if (existeVariable (car prg) mem) 
+				(cons (buscarVariable (car prg) mem) (reemplazarVars (cdr prg) mem))
+				(cons (car prg) (reemplazarVars (cdr prg) mem)) 
+			))
+	)
+)
+
+;Recibe una expresion en C y devuelve la expresion equivalente en Lisp
+(defun convertirExpLisp (expr ops vars)
+	(if (null expr) (componerExpresion ops vars)
+		(if (esOperador (car expr))
+			(if (> (length ops) 0)
+				;Si ya tengo un operador armo la expresion en base a la prioridad matematica
+				(if (< (obtenerPrioridad (car expr)) (obtenerPrioridad (car ops)))
+					(convertirExpLisp (cdr expr) (cons (car expr)(cdr ops)) 
+								(cons (list (car ops) (car (cdr vars)) (car vars)) (cdr (cdr vars)) )
+					)
+					(convertirExpLisp (cdr expr) (cons (car expr) ops) vars)
+				)
+				(convertirExpLisp (cdr expr) (cons (car expr) ops) vars)
+			)
+			(if (atom (car expr))
+				(convertirExpLisp (cdr expr) ops (cons (car expr) vars))
+				(convertirExpLisp (cdr expr) ops (cons (car (convertirExpLisp (car expr) nil nil)) vars))
+			)
+		)	
+	)
+)
+
+(defun componerExpresion (ops vars)
+	(if (null ops) vars
+		;Caso particular de comparacion en C 
+		(cond	((eq (car ops ) '==)	(componerExpresion (cdr ops) (cons (list 'eq (car (cdr vars)) (car vars) ) (cdr (cdr vars)))))
+					(T 	(componerExpresion (cdr ops) (cons (list (car ops) (car (cdr vars)) (car vars)) (cdr (cdr vars)) )))
+		))
+)
+
+(defun esOperador (elemento)
+	(if (null elemento) nil
+		(cond 
+			((equal elemento '+) T)
+			((equal elemento '*) T)
+			((equal elemento '-) T)
+			((equal elemento '/) T)
+			((equal elemento '<) T)
+			((equal elemento '>) T)
+			((equal elemento '<=) T)
+			((equal elemento '>=) T)
+			((equal elemento '==) T)
+			((equal elemento '=) T)
+			( T nil)
+		)
+	)
+)
+
+(defun obtenerPrioridad (op)
+	(if (null op) nil
+		(cond
+			((equal op '+) 2)
+			((equal op '*) 3)
+			((equal op '-) 2)
+			((equal op '/) 3)
+			((equal op '<) 1)
+			((equal op '>) 1)
+			((equal op '<=) 1)
+			((equal op '>=) 1)
+			( T 0)
+		)
+	)
+)
+
+;Evalua una expresion lisp, devolviendo el valor de la variable, un numero literal o una expresion V o F 
+(defun evaluarLisp (prg mem)
+	(if (atom prg) 
+		(if (numberp prg)	prg
+			(buscarVariable prg mem))
+	(eval (car (convertirExpLisp (reemplazarVars prg mem) nil nil)))
+	)
+)
+
+;Convierte los null o true en valores booleanos
+(defun filtrarNilTrue (resultado)
+	(cond
+		((null resultado) 0)
+		((equal resultado T) 1)
+		(T resultado)
+	)
+)
+
+;Devuelve el valor de una variable si se manda un atomo, 0 si la expresion evaluada es nil, 1 si la expresion evaluada es True
+(defun evaluar (prg mem)
+	(filtrarNilTrue (evaluarLisp prg mem))
+)
+
+;Busca la variable en memoria, si no la encuentra devuelve error
+(defun buscarVariable (var mem)
+	(if (null mem) 'ERROR_VARIABLE_NO_DECLARADA
+		(if (equal (car (car mem)) var) (car (cdr (car mem)))
+		(buscarVariable var (cdr mem))
+		) 
+	)
+)
+
+;Si existe la variable en memoria devuelve true sino devuelve false
+(defun existeVariable (var mem)
+	(if (null mem) nil
+		(if (equal (car (car mem)) var) T
+			(existeVariable var (cdr mem))
+		)
+	)
+)
+
+;Si es una variable o es un ++ o un -- se entiende que la expresion es una asignacion de variables
+(defun esAsignacion (expr memoria)
+	(if (existeVariable (car expr) memoria) T
+		(or (equal (car expr) '++) (equal (car expr) '--))
+	)
+)
+
+;Convierte el formato de asignaciones rapidas de C en el formato extendido (Ej: a ++ -> a = a + 1)
+(defun asignacion (expr memoria)
+	(if (existeVariable (car expr) memoria) 
+		(cond
+			( (and (equal (nth 1 expr) '=) (eq (length expr)  3)) (asociar (car expr) (nth 2 expr) memoria) ) 
+			( (equal (nth 1 expr) '=) (asociar (car expr) (evaluar (cdr (cdr expr)) memoria) memoria))
+			( (equal (nth 1 expr) '++) (asignacion (list (car expr) '= (car expr) '+ 1 ) memoria))
+			( (equal (nth 1 expr) '--) (asignacion (list (car expr) '= (car expr) '- 1 ) memoria))
+			( (and (equal (nth 1 expr) '-=) (eq (length expr)  3)) (asignacion (list (car expr) '=  (car expr) '- (nth 2 expr)) memoria) ) 
+			( (equal (nth 1 expr) '-=)  (asignacion (list (car expr) '=  (car expr) '- (evaluar (cdr (cdr expr)) memoria)) memoria) ) 
+			( (and (equal (nth 1 expr) '+=) (eq (length expr)  3)) (asignacion (list (car expr) '=  (car expr) '+ (nth 2 expr)) memoria) )
+			( (equal (nth 1 expr) '+=) (asignacion (list (car expr) '=  (car expr) '+ (evaluar (cdr (cdr expr)) memoria)) memoria) ) 
+			( (and (equal (nth 1 expr) '*=) (eq (length expr)  3)) (asignacion (list (car expr) '=  (car expr) '* (nth 2 expr)) memoria) ) 
+			( (equal (nth 1 expr) '*=) (asignacion (list (car expr) '=  (car expr) '* (evaluar (cdr (cdr expr)) memoria)) memoria) )
+			( T (asignacion (list (car l) '= (car l) (nth 1 expr) (nth 3 expr)) memoria))
+		)
+		(asignacion (reverse expr) memoria)
+	)
+)
+
+(defun procesar_if (prg ent mem salida)
+	;Evaluo la condicion
+	(if (not (equal (evaluar (car (cdr (car prg))) mem) 0))
+		;Ejecuto if si la condicion es verdadera
+		(ejecutar (append (nth 2 (car prg)) (cdr prg)) ent mem salida)
+		;Si la condicion es falsa chequeo si tiene else sino sigo ejecutando la siguiente instruccion
+		(if (equal (length (car prg)) 5) (ejecutar (append (nth 4 (car prg)) (cdr prg)) ent mem salida)
+			(ejecutar (cdr prg) ent mem salida)
+		) 
+	)
+)
+
+(defun procesar_while (prg ent mem salida)
+	(if (not (equal (evaluar (nth 1 (car prg)) mem) 0))
+		(ejecutar (append (nth 2 (car prg) ) prg) ent mem salida)
+		(ejecutar (cdr prg) ent mem salida)
+	)
+)
