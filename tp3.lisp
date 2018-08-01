@@ -1,4 +1,5 @@
-(defun run (prg datos &optional (mem nil))
+;Funcion principal que recibe un programa en pseudo C y una lista de datos
+(defun run (prg datos &optional mem)
 	(if (null prg) nil
 		(if (eq (car (car prg)) 'int) (run (cdr prg) datos (insertarEnMem (cdr (car prg)) mem))
 			(if (eq (car (car prg)) 'main) (ejecutar (car (cdr (car prg))) datos mem) 'ERROR)	
@@ -6,7 +7,9 @@
 	)
 )
 
-(defun ejecutar (prg datos mem &optional (salida nil))
+
+;Recibe una lista con el codigo de C a ejecutar y devuelve el resultado de la ejecuccion
+(defun ejecutar (prg datos mem &optional salida)
 	(if (null prg) (reverse salida)
 		(cond
 			( (esFuncion prg 'scanf) (ejecutar (cdr prg)(cdr datos) (asociar (car (cdr (car prg))) (car datos) mem) salida))
@@ -19,6 +22,8 @@
 	)
 )
 
+
+;Compara el nombre de una funcion o un ciclo con la funcion a ejecutar 
 (defun esFuncion (prg funcion)
 	(equal (car (car prg)) funcion)
 )
@@ -78,6 +83,7 @@
 	)
 )
 
+
 (defun componerExpresion (ops vars)
 	(if (null ops) vars
 		;Caso particular de comparacion en C 
@@ -86,6 +92,8 @@
 		))
 )
 
+
+;Recibe un elemento y devuelve T o nil en caso de que el elemento sea un operador matematico
 (defun esOperador (elemento)
 	(if (null elemento) nil
 		(cond 
@@ -104,6 +112,8 @@
 	)
 )
 
+
+;Le da prioridad a los operadores matematicos
 (defun obtenerPrioridad (op)
 	(if (null op) nil
 		(cond
@@ -120,14 +130,16 @@
 	)
 )
 
+
 ;Evalua una expresion lisp, devolviendo el valor de la variable, un numero literal o una expresion V o F 
 (defun evaluarLisp (prg mem)
 	(if (atom prg) 
 		(if (numberp prg)	prg
 			(buscarVariable prg mem))
-	(eval (car (convertirExpLisp (reemplazarVars prg mem) nil nil)))
+		(eval (car (convertirExpLisp (reemplazarVars prg mem) nil nil)))
 	)
 )
+
 
 ;Convierte los null o true en valores booleanos
 (defun filtrarNilTrue (resultado)
@@ -138,10 +150,12 @@
 	)
 )
 
+
 ;Devuelve el valor de una variable si se manda un atomo, 0 si la expresion evaluada es nil, 1 si la expresion evaluada es True
 (defun evaluar (prg mem)
 	(filtrarNilTrue (evaluarLisp prg mem))
 )
+
 
 ;Busca la variable en memoria, si no la encuentra devuelve error
 (defun buscarVariable (var mem)
@@ -152,6 +166,7 @@
 	)
 )
 
+
 ;Si existe la variable en memoria devuelve true sino devuelve false
 (defun existeVariable (var mem)
 	(if (null mem) nil
@@ -161,6 +176,7 @@
 	)
 )
 
+
 ;Si es una variable o es un ++ o un -- se entiende que la expresion es una asignacion de variables
 (defun esAsignacion (expr memoria)
 	(if (existeVariable (car expr) memoria) T
@@ -168,7 +184,8 @@
 	)
 )
 
-;Convierte el formato de asignaciones rapidas de C en el formato extendido (Ej: a ++ -> a = a + 1)
+
+;Procesa una expresion C que es una asignacion y la guarda en memoria.
 (defun asignacion (expr memoria)
 	(if (existeVariable (car expr) memoria) 
 		(cond
@@ -188,6 +205,8 @@
 	)
 )
 
+
+;Procesa  una instruccion if
 (defun procesar_if (prg ent mem salida)
 	;Evaluo la condicion
 	(if (not (equal (evaluar (car (cdr (car prg))) mem) 0))
@@ -200,6 +219,8 @@
 	)
 )
 
+
+;Proceso un ciclo while 
 (defun procesar_while (prg ent mem salida)
 	(if (not (equal (evaluar (nth 1 (car prg)) mem) 0))
 		(ejecutar (append (nth 2 (car prg) ) prg) ent mem salida)
