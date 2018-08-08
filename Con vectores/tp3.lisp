@@ -10,7 +10,7 @@
 
 ;Recibe una lista con el codigo de C a ejecutar y devuelve el resultado de la ejecuccion
 (defun ejecutar (prg datos mem &optional salida)
-;	(print mem)
+	(print mem)
 	(if (null prg) (reverse salida)
 		(cond
 			( (esFuncion prg 'scanf) (ejecutar (cdr prg)(cdr datos) (asociar (car (cdr (car prg))) (car datos) mem) salida))
@@ -48,13 +48,31 @@
 )
 
 ;Busca la variable en la memoria y la modifica si existe o la agrega si no existe
-(defun asociar (var valor memoria)
+(defun asociar (var valor memoria &optional indice)
 	; Si no lo encontre en la memoria lo agrego
-	(if (null memoria) (cons (list var valor) memoria)
-		; Si existe la modifico sino sigo buscando
-		(if (equal (car (car memoria)) var) (cons (list var valor) (cdr memoria))
-			(cons (car memoria) (asociar var valor (cdr memoria)))
+	(if (null indice)
+		(if (null memoria) (cons (list var valor) memoria)
+			; Si existe la modifico sino sigo buscando
+			(if (equal (car (car memoria)) var) (cons (list var valor) (cdr memoria))
+				(cons (car memoria) (asociar var valor (cdr memoria)))
+			)
 		)
+		(if (equal (car (car memoria)) var) 
+				;Busco el valor que contiene ese indice para modificarlo
+				(cons (modificarPorIndice (car memoria) valor indice) (cdr memoria))
+				(cons (car memoria) (asociar var valor (cdr memoria)))
+			)
+	)
+		
+)
+
+; vector= (v (1 2 3))
+(defun modificarPorIndice (vector valor indice)
+	(cond
+		((eq indice 0 )	(list (car vector) (cons valor (cdr (car(cdr vector))))))
+		((eq indice 1 )	(list (car vector) (list (car (car (cdr vector))) valor (car (cdr (cdr (car (cdr vector))))))))
+		((eq indice 2 )	(list (car vector) (list (car (car (cdr vector))) (car (cdr (car (cdr vector)))) valor)))
+		( T 'Excede_limite)
 	)
 )
 
@@ -165,6 +183,7 @@
 
 ;Devuelve el valor de una variable si se manda un atomo, 0 si la expresion evaluada es nil, 1 si la expresion evaluada es True
 (defun evaluar (prg mem &optional indice)
+	(print indice)
 	(filtrarNilTrue (evaluarLisp prg mem indice))
 )
 
@@ -179,7 +198,7 @@
 					((eq indice 0 )	(car (car (cdr (car mem)))))
 					((eq indice 1 )	(car (cdr (car (cdr (car mem))))))
 					((eq indice 2 )	(car (cdr (cdr (car (cdr (car mem)))))))
-					((T) 'Excede_limite)
+					( T 'Excede_limite)
 				)
 			)
 			(buscarVariable var (cdr mem))
@@ -225,9 +244,9 @@
 			( (and (equal (nth 1 expr) '=) (eq (length expr)  3)) (asociar (car expr) (nth 2 expr) memoria) )
 			( (equal (nth 1 expr) '=) (asociar (car expr) (evaluar (cdr (cdr expr)) memoria (nth 2 expr)) memoria))
 			;Caso de asignacion de vector 
-			( (equal (nth 4 expr) '=) (asociar (car expr) (evaluar (cdr (cdr (cdr (cdr (cdr expr))))) memoria) memoria))
-			
-			
+			( (equal (nth 4 expr) '=) (asociar (car expr) (evaluar (cdr (cdr (cdr (cdr (cdr expr))))) memoria) memoria (nth 2 expr)))
+			( (and (equal (nth 4 expr) '++) (eq (length expr) 5)) (asignacion (list (nth 0 expr)(nth 1 expr)(nth 2 expr)(nth 3 expr) '= 
+																											     (nth 0 expr)(nth 1 expr)(nth 2 expr)(nth 3 expr) '+ 1 ) memoria))
 			
 			( (equal (nth 1 expr) '++) (asignacion (list (car expr) '= (car expr) '+ 1 ) memoria))
 			( (equal (nth 1 expr) '--) (asignacion (list (car expr) '= (car expr) '- 1 ) memoria))
