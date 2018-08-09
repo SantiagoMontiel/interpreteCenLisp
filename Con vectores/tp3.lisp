@@ -1,4 +1,4 @@
-;Funcion principal que recibe un programa en pseudo C y una lista de datos
+;Funcion principal que recibe un programa en pseudo C y una lista de datos y devuelve la ejecucion del codigo pseudo c
 (defun run (prg datos &optional mem)
 	(if (null prg) nil
 		(if (eq (car (car prg)) 'int) (run (cdr prg) datos (insertarEnMem (cdr (car prg)) mem))
@@ -8,18 +8,17 @@
 )
 
 
-;Recibe una lista con el codigo de C a ejecutar y devuelve el resultado de la ejecuccion
+;Recibe una lista con el codigo main de C a ejecutar y devuelve el resultado de la ejecuccion
 (defun ejecutar (prg datos mem &optional salida)
-	(print mem)
 	(if (null prg) (reverse salida)
 		(cond
 			( (esFuncion prg 'scanf) (ejecutar (cdr prg)(cdr datos) (asociar (car (cdr (car prg))) (car datos) mem) salida))
 			( (esFuncion prg 'printf) 
+				;Si lo que voy a imprimir es un vector le paso el indice al ejecutar 
 				(if (esVector (car (cdr (car prg))) mem)
 					(ejecutar (cdr prg) datos mem (cons (evaluar (car (cdr (car prg))) mem (car (cdr (cdr (cdr (car prg)))))) salida) ) 
-					(ejecutar (cdr prg) datos mem (cons (evaluar (car (cdr (car prg))) mem) salida) ) ))
-			
-			
+					(ejecutar (cdr prg) datos mem (cons (evaluar (car (cdr (car prg))) mem) salida) ) ))			
+					
 			( (esFuncion prg  'if) (procesar_if prg datos mem salida ))
 			( (esFuncion prg  'while)(procesar_while prg datos mem salida )) 
 			( (esAsignacion (car prg) mem) (ejecutar (cdr prg) datos (asignacion (car prg) mem) salida ) )
@@ -37,6 +36,7 @@
 ;Recibe las asignaciones previas al main y las almacena en la memoria
 (defun insertarEnMem (var mem)
 	(if (null var) nil
+		;Si tengo un vector el valor del mismo debe estar en la posicion 3 
 		(if (equal  (nth 1 var ) '[])	(asociar (nth 0 var) (nth 3 var) (insertarEnMem (cdr (cdr (cdr (cdr var)))) mem))
 			(if (equal (length var) 1) 	(asociar (car var) 0  mem)
 				(if (equal (nth 1 var) '=)		(asociar (nth 0 var) (nth 2 var)(insertarEnMem (cdr (cdr (cdr var))) mem))
@@ -49,14 +49,17 @@
 
 ;Busca la variable en la memoria y la modifica si existe o la agrega si no existe
 (defun asociar (var valor memoria &optional indice)
-	; Si no lo encontre en la memoria lo agrego
+	;Si indice es null se que se trata de una variable, de lo contrario se trata de un vector
 	(if (null indice)
+		; Si no lo encontre en la memoria lo agrego
 		(if (null memoria) (cons (list var valor) memoria)
 			; Si existe la modifico sino sigo buscando
 			(if (equal (car (car memoria)) var) (cons (list var valor) (cdr memoria))
 				(cons (car memoria) (asociar var valor (cdr memoria)))
 			)
 		)
+		;Se quiere asociar un vector!
+		;Si lo encontre lo modifico, sino sigo buscando.
 		(if (equal (car (car memoria)) var) 
 				;Busco el valor que contiene ese indice para modificarlo
 				(cons (modificarPorIndice (car memoria) valor indice) (cdr memoria))
@@ -66,8 +69,9 @@
 		
 )
 
-; vector= (v (1 2 3))
-(defun modificarPorIndice (vector valor indice)
+; vec = (v (1 2 3))
+(defun modificarPorIndice (vec valor indice)
+
 	(cond
 		((eq indice 0 )	(list (car vector) (cons valor (cdr (car(cdr vector))))))
 		((eq indice 1 )	(list (car vector) (list (car (car (cdr vector))) valor (car (cdr (cdr (car (cdr vector))))))))
@@ -76,11 +80,13 @@
 	)
 )
 
+
 ;Reemplaza los nombres de las variables por su valor real 
 (defun reemplazarVars (prg mem &optional indice)
 	(if (null prg) nil
 		(if (listp (car prg))	(cons (reemplazarVars (car prg) mem) (reemplazarVars (cdr prg) mem))
 			(if (existeVariable (car prg) mem) 
+					;Si es un vector ademas del nombre debo pasarle el indice para saber como reemplazar
 					(if (esVector (car prg) mem)	(cons (buscarVariable (car prg) mem (car (cdr (cdr prg)))) (reemplazarVars (cdr (cdr (cdr (cdr prg)))) mem))
 						(cons (buscarVariable (car prg) mem) (reemplazarVars (cdr prg) mem)))
 					(cons (car prg) (reemplazarVars (cdr prg) mem)) 
@@ -163,6 +169,7 @@
 (defun evaluarLisp (prg mem &optional indice)
 	(if (atom prg) 
 		(if (numberp prg)	prg
+			;Si se que es un vector pero no tengo su indice debo obtenerlo de la expresion
 			(if (and (esVector prg mem) (null indice))	(buscarVariable prg mem (car (cdr (cdr prg))))
 				(buscarVariable prg mem indice))
 		)
@@ -183,7 +190,6 @@
 
 ;Devuelve el valor de una variable si se manda un atomo, 0 si la expresion evaluada es nil, 1 si la expresion evaluada es True
 (defun evaluar (prg mem &optional indice)
-	(print indice)
 	(filtrarNilTrue (evaluarLisp prg mem indice))
 )
 
