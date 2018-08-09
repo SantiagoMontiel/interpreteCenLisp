@@ -69,8 +69,8 @@
 		
 )
 
-; vec = (v (1 2 3))
-(defun modificarPorIndice (vec valor indice)
+; vector = (v (1 2 3))
+(defun modificarPorIndice (vector valor indice)
 
 	(cond
 		((eq indice 0 )	(list (car vector) (cons valor (cdr (car(cdr vector))))))
